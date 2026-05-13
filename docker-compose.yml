@@ -1,0 +1,14 @@
+﻿services:
+  channel-adapter-gateway:
+    image: channel-adapter-gateway:v1
+    container_name: channel-adapter-gateway
+    restart: always
+    ports:
+      - "8088:8088"
+    environment:
+      - GATEWAY_CONFIG=/app/configs/config.yaml
+    volumes:
+      - ./configs/config.yaml:/app/configs/config.yaml
+      - ./data:/app/data
+
+

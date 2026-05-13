@@ -1,0 +1,20 @@
+server:
+  # 服务监听地址。NewAPI 中配置官方渠道时，Base URL 指向这个服务。
+  addr: ":8088"
+  # 后台登录 JWT 签名密钥，生产环境请修改。
+  jwt_secret: "please-change-this-secret"
+  # 调用第三方上游接口的默认超时时间，单位秒。
+  upstream_timeout_seconds: 180
+
+database:
+  # 数据库类型，目前使用 PostgreSQL。
+  driver: "postgres"
+  # PostgreSQL 连接字符串。数据库需要提前创建，表结构由 GORM 自动初始化。
+  dsn: "postgres://root:123456@192.168.219.145:5432/channel_adapter_gateway?sslmode=disable&TimeZone=Asia/Shanghai"
+  # 启动时自动创建缺失的数据表。
+  auto_migrate: true
+
+admin:
+  # 首次初始化管理员账号；如果 users 表已有用户，则不会重复创建。
+  username: "admin"
+  password: "Xinmei@amdin"

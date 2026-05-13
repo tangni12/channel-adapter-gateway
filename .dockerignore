@@ -1,0 +1,6 @@
+.build
+.gocache
+web/node_modules
+web/dist
+pgdata
+data

@@ -1,0 +1,82 @@
+package official
+
+func OpenAIEndpoints() []EndpointSpec {
+	return []EndpointSpec{
+		{
+			Key:              "openai.images.generations",
+			Protocol:         "openai",
+			Name:             "OpenAI Images Generations",
+			Method:           "POST",
+			Path:             "/v1/images/generations",
+			BodyMode:         "json",
+			UpstreamBodyMode: "json",
+			Description:      "OpenAI-compatible text-to-image generation endpoint.",
+			Params: []ParamSpec{
+				{Name: "prompt", Location: "json", Type: "string", Required: true, Description: "Text prompt."},
+				{Name: "background", Location: "json", Type: "string", Default: "auto", Options: []string{"transparent", "opaque", "auto"}, Description: "Background handling for GPT image models."},
+				{Name: "model", Location: "json", Type: "string", Default: "dall-e-2", Description: "Public model name exposed by this gateway."},
+				{Name: "moderation", Location: "json", Type: "string", Default: "auto", Options: []string{"auto", "low"}, Description: "Content moderation level for GPT image models."},
+				{Name: "n", Location: "json", Type: "integer", Default: 1, Description: "Number of images."},
+				{Name: "output_compression", Location: "json", Type: "integer", Default: 100, Description: "Compression level for webp/jpeg output formats."},
+				{Name: "output_format", Location: "json", Type: "string", Default: "png", Options: []string{"png", "jpeg", "webp"}, Description: "Output file format for GPT image models."},
+				{Name: "partial_images", Location: "json", Type: "integer", Default: 0, Description: "Partial image count for streaming responses."},
+				{Name: "quality", Location: "json", Type: "string", Default: "auto", Options: []string{"auto", "low", "medium", "high", "standard", "hd"}, Description: "Image quality."},
+				{Name: "response_format", Location: "json", Type: "string", Default: "url", Options: []string{"url", "b64_json"}, Description: "Response format for dall-e-2 and dall-e-3."},
+				{Name: "size", Location: "json", Type: "string", Default: "auto", Description: "Image size."},
+				{Name: "stream", Location: "json", Type: "boolean", Default: false, Description: "Streaming flag."},
+				{Name: "style", Location: "json", Type: "string", Default: "vivid", Options: []string{"vivid", "natural"}, Description: "Style for dall-e-3."},
+				{Name: "user", Location: "json", Type: "string", Description: "End-user identifier for abuse monitoring."},
+			},
+			ResponseFields: imageResponseFields(),
+		},
+		{
+			Key:              "openai.images.edits",
+			Protocol:         "openai",
+			Name:             "OpenAI Images Edits",
+			Method:           "POST",
+			Path:             "/v1/images/edits",
+			BodyMode:         "multipart",
+			UpstreamBodyMode: "multipart",
+			Description:      "OpenAI-compatible image edit endpoint. This gateway accepts multipart image files and JSON image references.",
+			Params: []ParamSpec{
+				{Name: "image", Location: "file", Type: "file", Required: true, Description: "Input image file. Can also be image[] for multiple files."},
+				{Name: "images[]", Location: "json", Type: "array", Description: "Input image URLs or base64 references for JSON-style edit requests."},
+				{Name: "prompt", Location: "form", Type: "string", Required: true, Description: "Edit prompt."},
+				{Name: "background", Location: "form", Type: "string", Default: "auto", Options: []string{"transparent", "opaque", "auto"}, Description: "Background handling."},
+				{Name: "input_fidelity", Location: "form", Type: "string", Default: "low", Options: []string{"high", "low"}, Description: "How much the model should preserve input image style and features."},
+				{Name: "mask", Location: "file", Type: "file", Description: "Optional edit mask."},
+				{Name: "model", Location: "form", Type: "string", Default: "dall-e-2", Description: "Public model name exposed by this gateway."},
+				{Name: "n", Location: "form", Type: "integer", Default: 1, Description: "Number of images."},
+				{Name: "output_compression", Location: "form", Type: "integer", Default: 100, Description: "Compression level for webp/jpeg output formats."},
+				{Name: "output_format", Location: "form", Type: "string", Default: "png", Options: []string{"png", "jpeg", "webp"}, Description: "Output file format."},
+				{Name: "partial_images", Location: "form", Type: "integer", Default: 0, Description: "Partial image count for streaming responses."},
+				{Name: "quality", Location: "form", Type: "string", Default: "auto", Options: []string{"auto", "low", "medium", "high", "standard"}, Description: "Image quality."},
+				{Name: "response_format", Location: "form", Type: "string", Default: "url", Options: []string{"url", "b64_json"}, Description: "Response format for dall-e-2."},
+				{Name: "size", Location: "form", Type: "string", Default: "1024x1024", Description: "Image size."},
+				{Name: "stream", Location: "form", Type: "boolean", Default: false, Description: "Streaming flag."},
+				{Name: "user", Location: "form", Type: "string", Description: "End-user identifier for abuse monitoring."},
+			},
+			ResponseFields: imageResponseFields(),
+		},
+	}
+}
+
+func imageResponseFields() []ParamSpec {
+	return []ParamSpec{
+		{Name: "created", Location: "json", Type: "integer", Required: true, Description: "Response creation timestamp."},
+		{Name: "background", Location: "json", Type: "string", Options: []string{"transparent", "opaque"}, Description: "Background used for the image generation."},
+		{Name: "data[].url", Location: "json", Type: "string", Description: "Image URL when supported."},
+		{Name: "data[].b64_json", Location: "json", Type: "string", Description: "Base64 image payload."},
+		{Name: "data[].revised_prompt", Location: "json", Type: "string", Description: "Revised prompt."},
+		{Name: "output_format", Location: "json", Type: "string", Options: []string{"png", "webp", "jpeg"}, Description: "Output image format."},
+		{Name: "quality", Location: "json", Type: "string", Options: []string{"low", "medium", "high"}, Description: "Generated image quality."},
+		{Name: "size", Location: "json", Type: "string", Options: []string{"1024x1024", "1024x1536", "1536x1024"}, Description: "Generated image size."},
+		{Name: "usage.input_tokens", Location: "json", Type: "integer", Description: "Input tokens."},
+		{Name: "usage.input_tokens_details.image_tokens", Location: "json", Type: "integer", Description: "Input image tokens."},
+		{Name: "usage.input_tokens_details.text_tokens", Location: "json", Type: "integer", Description: "Input text tokens."},
+		{Name: "usage.output_tokens", Location: "json", Type: "integer", Description: "Output tokens."},
+		{Name: "usage.total_tokens", Location: "json", Type: "integer", Description: "Total tokens."},
+		{Name: "usage.output_tokens_details.image_tokens", Location: "json", Type: "integer", Description: "Output image tokens."},
+		{Name: "usage.output_tokens_details.text_tokens", Location: "json", Type: "integer", Description: "Output text tokens."},
+	}
+}
