@@ -68,11 +68,11 @@ Stores official-to-upstream conversion rules.
 | file_field_map_json | Multipart file field mapping |
 | defaults_json | Default upstream parameters |
 | ignore_fields_json | Fields to drop |
-| normalize_openai_usage | Whether to add `prompt_tokens` and `completion_tokens` from `input_tokens` and `output_tokens` |
+| normalize_openai_usage | Whether to apply endpoint-specific OpenAI usage cleanup, such as filling `total_tokens` when safe |
 
 ### request_logs
 
-Stores request traces, including upstream URL, status code, latency, provider trace ID, and normalized usage.
+Stores request traces, including upstream URL, status code, latency, provider trace ID, normalized usage, official request, upstream request, upstream raw response, and final official response. Authorization headers and provider keys are not persisted.
 
 ## Canvas-20 example
 

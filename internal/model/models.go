@@ -75,21 +75,25 @@ type MappingRule struct {
 }
 
 type RequestLog struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt       time.Time `json:"created_at"`
-	RequestID       string    `gorm:"size:64;index" json:"request_id"`
-	Method          string    `gorm:"size:16" json:"method"`
-	Path            string    `gorm:"size:256" json:"path"`
-	PublicModel     string    `gorm:"size:128;index" json:"public_model"`
-	TargetProtocol  string    `gorm:"size:64;index" json:"target_protocol"`
-	TargetEndpoint  string    `gorm:"size:96;index" json:"target_endpoint"`
-	UpstreamModel   string    `gorm:"size:128" json:"upstream_model"`
-	ProviderCode    string    `gorm:"size:64;index" json:"provider_code"`
-	UpstreamURL     string    `gorm:"size:1024" json:"upstream_url"`
-	StatusCode      int       `gorm:"index" json:"status_code"`
-	LatencyMs       int64     `json:"latency_ms"`
-	TraceID         string    `gorm:"size:128;index" json:"trace_id"`
-	ErrorMessage    string    `gorm:"size:2048" json:"error_message"`
-	RequestSnapshot string    `gorm:"type:jsonb" json:"request_snapshot,omitempty"`
-	ResponseUsage   string    `gorm:"type:jsonb" json:"response_usage,omitempty"`
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt        time.Time `json:"created_at"`
+	RequestID        string    `gorm:"size:64;index" json:"request_id"`
+	Method           string    `gorm:"size:16" json:"method"`
+	Path             string    `gorm:"size:256" json:"path"`
+	PublicModel      string    `gorm:"size:128;index" json:"public_model"`
+	TargetProtocol   string    `gorm:"size:64;index" json:"target_protocol"`
+	TargetEndpoint   string    `gorm:"size:96;index" json:"target_endpoint"`
+	UpstreamModel    string    `gorm:"size:128" json:"upstream_model"`
+	ProviderCode     string    `gorm:"size:64;index" json:"provider_code"`
+	UpstreamURL      string    `gorm:"size:1024" json:"upstream_url"`
+	StatusCode       int       `gorm:"index" json:"status_code"`
+	LatencyMs        int64     `json:"latency_ms"`
+	TraceID          string    `gorm:"size:128;index" json:"trace_id"`
+	ErrorMessage     string    `gorm:"size:2048" json:"error_message"`
+	RequestSnapshot  string    `gorm:"type:jsonb" json:"request_snapshot,omitempty"`
+	OfficialRequest  string    `gorm:"type:jsonb" json:"official_request,omitempty"`
+	UpstreamRequest  string    `gorm:"type:jsonb" json:"upstream_request,omitempty"`
+	UpstreamResponse string    `gorm:"type:jsonb" json:"upstream_response,omitempty"`
+	OfficialResponse string    `gorm:"type:jsonb" json:"official_response,omitempty"`
+	ResponseUsage    string    `gorm:"type:jsonb" json:"response_usage,omitempty"`
 }

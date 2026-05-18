@@ -14,11 +14,12 @@ import (
 )
 
 type UpstreamRequest struct {
-	Method      string
-	URL         string
-	ContentType string
-	Body        io.Reader
-	Snapshot    []byte
+	Method           string
+	URL              string
+	ContentType      string
+	Body             io.Reader
+	OfficialSnapshot []byte
+	UpstreamSnapshot []byte
 }
 
 func BuildJSON(provider model.Provider, rule model.MappingRule, body []byte) (*UpstreamRequest, error) {
@@ -54,11 +55,12 @@ func BuildJSON(provider model.Provider, rule model.MappingRule, body []byte) (*U
 		return nil, err
 	}
 	return &UpstreamRequest{
-		Method:      defaultString(rule.UpstreamMethod, http.MethodPost),
-		URL:         joinURL(provider.BaseURL, rule.UpstreamPath),
-		ContentType: "application/json",
-		Body:        bytes.NewReader(cleaned),
-		Snapshot:    cleaned,
+		Method:           defaultString(rule.UpstreamMethod, http.MethodPost),
+		URL:              joinURL(provider.BaseURL, rule.UpstreamPath),
+		ContentType:      "application/json",
+		Body:             bytes.NewReader(cleaned),
+		OfficialSnapshot: normalizeJSONSnapshot(body),
+		UpstreamSnapshot: cleaned,
 	}, nil
 }
 
@@ -126,24 +128,93 @@ func BuildMultipart(req *http.Request, provider model.Provider, rule model.Mappi
 	if err := writer.Close(); err != nil {
 		return nil, err
 	}
-	snapshot, _ := json.Marshal(map[string]any{
+	upstreamSnapshot, _ := json.Marshal(map[string]any{
 		"body_mode":   model.BodyModeMultipart,
 		"model":       rule.UpstreamModel,
 		"file_count":  fileCount,
 		"field_map":   fieldMap,
 		"target_path": rule.UpstreamPath,
 	})
+	officialSnapshot, _ := json.Marshal(multipartSnapshot(req))
 
 	return &UpstreamRequest{
-		Method:      defaultString(rule.UpstreamMethod, http.MethodPost),
-		URL:         joinURL(provider.BaseURL, rule.UpstreamPath),
-		ContentType: writer.FormDataContentType(),
-		Body:        bytes.NewReader(buffer.Bytes()),
-		Snapshot:    snapshot,
+		Method:           defaultString(rule.UpstreamMethod, http.MethodPost),
+		URL:              joinURL(provider.BaseURL, rule.UpstreamPath),
+		ContentType:      writer.FormDataContentType(),
+		Body:             bytes.NewReader(buffer.Bytes()),
+		OfficialSnapshot: officialSnapshot,
+		UpstreamSnapshot: upstreamSnapshot,
 	}, nil
 }
 
-func NormalizeOpenAIUsage(body []byte) ([]byte, []byte, error) {
+func normalizeJSONSnapshot(body []byte) []byte {
+	var payload any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		snapshot, _ := json.Marshal(map[string]any{"raw": string(body)})
+		return snapshot
+	}
+	normalized, err := json.Marshal(payload)
+	if err != nil {
+		snapshot, _ := json.Marshal(map[string]any{"raw": string(body)})
+		return snapshot
+	}
+	return normalized
+}
+
+func multipartSnapshot(req *http.Request) map[string]any {
+	snapshot := map[string]any{
+		"body_mode":    model.BodyModeMultipart,
+		"content_type": req.Header.Get("Content-Type"),
+		"fields":       map[string]any{},
+		"files":        []map[string]any{},
+	}
+	if req.MultipartForm == nil {
+		return snapshot
+	}
+	fields := make(map[string]any)
+	for key, values := range req.MultipartForm.Value {
+		if len(values) == 1 {
+			fields[key] = values[0]
+		} else {
+			fields[key] = values
+		}
+	}
+	files := make([]map[string]any, 0)
+	for key, fileHeaders := range req.MultipartForm.File {
+		for _, fileHeader := range fileHeaders {
+			files = append(files, map[string]any{
+				"field":       key,
+				"filename":    fileHeader.Filename,
+				"size":        fileHeader.Size,
+				"header":      fileHeader.Header,
+				"contentType": fileHeader.Header.Get("Content-Type"),
+			})
+		}
+	}
+	snapshot["fields"] = fields
+	snapshot["files"] = files
+	return snapshot
+}
+
+const (
+	OpenAIEndpointImagesGenerations = "openai.images.generations"
+	OpenAIEndpointImagesEdits       = "openai.images.edits"
+	OpenAIEndpointResponses         = "openai.responses"
+)
+
+func NormalizeOpenAIUsageForEndpoint(body []byte, endpoint string) ([]byte, []byte, error) {
+	// 为返回参数做统一后处理，代码层面补充参数
+	switch endpoint {
+	case OpenAIEndpointImagesGenerations, OpenAIEndpointImagesEdits:
+		return normalizeOpenAIInputOutputUsage(body)
+	case OpenAIEndpointResponses:
+		return normalizeOpenAIInputOutputUsage(body)
+	default:
+		return normalizeOpenAILegacyUsage(body)
+	}
+}
+
+func normalizeOpenAIInputOutputUsage(body []byte) ([]byte, []byte, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return body, nil, nil
@@ -152,23 +223,33 @@ func NormalizeOpenAIUsage(body []byte) ([]byte, []byte, error) {
 	if !ok {
 		return body, nil, nil
 	}
-	_, hasInputTokens := usage["input_tokens"]
-	_, hasOutputTokens := usage["output_tokens"]
-	if hasInputTokens || hasOutputTokens {
-		// 图片接口的官方 usage 使用 input_tokens/output_tokens。
-		// NewAPI 会把这两个字段归一化到 prompt_tokens/completion_tokens；
-		// 如果网关提前也返回 prompt_tokens/completion_tokens，会导致 NewAPI 再叠加一次。
-		delete(usage, "prompt_tokens")
-		delete(usage, "completion_tokens")
-		if _, exists := usage["total_tokens"]; !exists {
+
+	if _, hasTotal := usage["total_tokens"]; !hasTotal {
+		_, hasInput := usage["input_tokens"]
+		_, hasOutput := usage["output_tokens"]
+		if hasInput || hasOutput {
 			usage["total_tokens"] = toFloat(usage["input_tokens"]) + toFloat(usage["output_tokens"])
 		}
-		normalized, err := json.Marshal(payload)
-		if err != nil {
-			return body, nil, err
-		}
-		usageBytes, _ := json.Marshal(usage)
-		return normalized, usageBytes, nil
+	} else if usage["total_tokens"] == nil {
+		usage["total_tokens"] = toFloat(usage["input_tokens"]) + toFloat(usage["output_tokens"])
+	}
+
+	normalized, err := json.Marshal(payload)
+	if err != nil {
+		return body, nil, err
+	}
+	usageBytes, _ := json.Marshal(usage)
+	return normalized, usageBytes, nil
+}
+
+func normalizeOpenAILegacyUsage(body []byte) ([]byte, []byte, error) {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body, nil, nil
+	}
+	usage, ok := payload["usage"].(map[string]any)
+	if !ok {
+		return body, nil, nil
 	}
 	if _, exists := usage["prompt_tokens"]; !exists {
 		if value, ok := usage["input_tokens"]; ok {

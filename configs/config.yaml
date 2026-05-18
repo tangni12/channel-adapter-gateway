@@ -1,5 +1,5 @@
 server:
-  # 服务监听地址。NewAPI 中配置官方渠道时，Base URL 指向这个服务。
+  # 服务监听地址。NewAPI 中配置渠道 Base URL 时指向这个服务。
   addr: ":8088"
   # 后台登录 JWT 签名密钥，生产环境请修改。
   jwt_secret: "please-change-this-secret"
@@ -7,12 +7,40 @@ server:
   upstream_timeout_seconds: 180
 
 database:
-  # 数据库类型，目前使用 PostgreSQL。
+  # 数据库类型，目前支持 PostgreSQL。
   driver: "postgres"
   # PostgreSQL 连接字符串。数据库需要提前创建，表结构由 GORM 自动初始化。
   dsn: "postgres://root:123456@192.168.219.145:5432/channel_adapter_gateway?sslmode=disable&TimeZone=Asia/Shanghai"
-  # 启动时自动创建缺失的数据表。
+  # 启动时自动创建缺失的数据表和字段。
   auto_migrate: true
+  # 数据库连接池配置，避免高并发下频繁创建连接。
+  max_open_conns: 30
+  max_idle_conns: 10
+  conn_max_lifetime_seconds: 1800
+
+logging:
+  # 请求日志异步写库，避免转发请求被数据库 IO 阻塞。
+  async_request_log: true
+  # 内存日志队列长度。并发高或上游响应大时可以调大。
+  queue_size: 2000
+  # 后台写日志 worker 数量。
+  worker_count: 2
+  # 批量写库条数。
+  batch_size: 50
+  # 批量写库最大等待时间，单位毫秒。
+  flush_interval_ms: 1000
+  # 日志写库失败后的重试次数。
+  max_retries: 3
+  # 每次重试之间的等待时间，单位毫秒。
+  retry_interval_ms: 300
+  # 请求线程等待日志入队的最长时间，单位毫秒。超时后不阻塞主请求。
+  enqueue_timeout_ms: 10
+  # 单个请求/响应快照最大入库大小，超过后会截断并记录原始大小。
+  max_payload_bytes: 10485760
+  # 队列满丢弃日志时是否打印系统日志。
+  log_dropped_when_full: true
+  # 服务关闭时等待异步日志刷盘的最长时间，单位秒。
+  sync_on_shutdown_seconds: 5
 
 admin:
   # 首次初始化管理员账号；如果 users 表已有用户，则不会重复创建。

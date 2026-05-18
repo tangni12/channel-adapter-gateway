@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"channel-adapter-gateway/internal/config"
 	"channel-adapter-gateway/internal/model"
@@ -13,12 +14,25 @@ import (
 )
 
 func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
+	var db *gorm.DB
+	var err error
 	switch strings.ToLower(cfg.Driver) {
 	case "postgres", "postgresql", "pg":
-		return gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
+		db, err = gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
 	}
+	if err != nil {
+		return nil, err
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSeconds) * time.Second)
+	return db, nil
 }
 
 func AutoMigrate(db *gorm.DB) error {

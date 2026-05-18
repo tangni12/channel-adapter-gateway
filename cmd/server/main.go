@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
+	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"channel-adapter-gateway/internal/config"
 	"channel-adapter-gateway/internal/database"
@@ -34,7 +40,8 @@ func main() {
 	}
 
 	authSvc := service.NewAuthService(cfg.Server.JWTSecret)
-	proxySvc := service.NewProxyService(db, cache, cfg.Server.UpstreamTimeoutSeconds)
+	requestLogger := service.NewRequestLogger(db, cfg.Logging)
+	proxySvc := service.NewProxyService(db, cache, cfg.Server.UpstreamTimeoutSeconds, requestLogger)
 	adminSvc := service.NewAdminService(db, authSvc, cache)
 
 	engine := router.New(router.Dependencies{
@@ -46,7 +53,43 @@ func main() {
 	})
 
 	log.Printf("channel adapter gateway listening on %s", cfg.Server.Addr)
-	if err := engine.Run(cfg.Server.Addr); err != nil {
-		log.Fatalf("server start failed: %v", err)
+	server := &http.Server{
+		Addr:    cfg.Server.Addr,
+		Handler: engine,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	select {
+	case <-ctx.Done():
+		log.Printf("shutdown signal received")
+	case err := <-errCh:
+		if !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server start failed: %v", err)
+		}
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("http server shutdown failed: %v", err)
+	}
+
+	logCtx, logCancel := context.WithTimeout(context.Background(), time.Duration(cfg.Logging.SyncOnShutdownSeconds)*time.Second)
+	defer logCancel()
+	requestLogger.Shutdown(logCtx)
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server start failed: %v", err)
+		}
+	default:
 	}
 }
