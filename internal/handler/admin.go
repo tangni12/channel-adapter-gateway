@@ -250,6 +250,8 @@ func (h *AdminHandler) UpdateMapping(c *gin.Context) {
 	row.HeaderMapJSON = req.HeaderMapJSON
 	row.ResponseFieldMapJSON = req.ResponseFieldMapJSON
 	row.ResponseDefaultsJSON = req.ResponseDefaultsJSON
+	row.ErrorFieldMapJSON = req.ErrorFieldMapJSON
+	row.ErrorDefaultsJSON = req.ErrorDefaultsJSON
 	row.NormalizeOpenAIUsage = req.NormalizeOpenAIUsage
 	row.Enabled = req.Enabled
 	row.ExtraJSON = req.ExtraJSON
@@ -319,6 +321,8 @@ func normalizeMapping(row *model.MappingRule) {
 	row.HeaderMapJSON = normalizeJSONObject(row.HeaderMapJSON)
 	row.ResponseFieldMapJSON = normalizeJSONObject(row.ResponseFieldMapJSON)
 	row.ResponseDefaultsJSON = normalizeJSONObject(row.ResponseDefaultsJSON)
+	row.ErrorFieldMapJSON = normalizeJSONObject(row.ErrorFieldMapJSON)
+	row.ErrorDefaultsJSON = normalizeJSONObject(row.ErrorDefaultsJSON)
 	row.ExtraJSON = normalizeJSONObject(row.ExtraJSON)
 }
 

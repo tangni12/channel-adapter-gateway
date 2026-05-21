@@ -28,6 +28,7 @@ func OpenAIEndpoints() []EndpointSpec {
 				{Name: "user", Location: "json", Type: "string", Description: "End-user identifier for abuse monitoring."},
 			},
 			ResponseFields: imageResponseFields(),
+			ErrorFields:    openAIErrorFields(),
 		},
 		{
 			Key:              "openai.images.edits",
@@ -57,6 +58,7 @@ func OpenAIEndpoints() []EndpointSpec {
 				{Name: "user", Location: "form", Type: "string", Description: "End-user identifier for abuse monitoring."},
 			},
 			ResponseFields: imageResponseFields(),
+			ErrorFields:    openAIErrorFields(),
 		},
 	}
 }
@@ -78,5 +80,14 @@ func imageResponseFields() []ParamSpec {
 		{Name: "usage.total_tokens", Location: "json", Type: "integer", Description: "Total tokens."},
 		{Name: "usage.output_tokens_details.image_tokens", Location: "json", Type: "integer", Description: "Output image tokens."},
 		{Name: "usage.output_tokens_details.text_tokens", Location: "json", Type: "integer", Description: "Output text tokens."},
+	}
+}
+
+func openAIErrorFields() []ParamSpec {
+	return []ParamSpec{
+		{Name: "error.message", Location: "json", Type: "string", Required: true, Description: "Human-readable error message."},
+		{Name: "error.type", Location: "json", Type: "string", Default: "upstream_error", Description: "OpenAI-compatible error type."},
+		{Name: "error.param", Location: "json", Type: "string", Description: "Request parameter related to the error."},
+		{Name: "error.code", Location: "json", Type: "string", Description: "Machine-readable error code."},
 	}
 }

@@ -29,6 +29,8 @@ const MAPPING_EMPTY = {
   header_map_json: "{}",
   response_field_map_json: "{}",
   response_defaults_json: "{}",
+  error_field_map_json: "{}",
+  error_defaults_json: "{}",
   normalize_openai_usage: true,
   enabled: true,
 };
@@ -336,6 +338,7 @@ function MappingFormPage({ api, navigate, mappingId, providerCode }) {
   const [providers, setProviders] = useState([]);
   const [paramRows, setParamRows] = useState([]);
   const [responseRows, setResponseRows] = useState([]);
+  const [errorRows, setErrorRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const selectedEndpoint = endpoints.find((item) => item.key === form.target_endpoint) || endpoints[0];
@@ -363,6 +366,7 @@ function MappingFormPage({ api, navigate, mappingId, providerCode }) {
         if (endpoint) {
           setParamRows(createParamRows(endpoint, nextForm));
           setResponseRows(createResponseRows(endpoint, nextForm));
+          setErrorRows(createErrorRows(endpoint, nextForm));
         }
       } catch (err) {
         if (alive) setMessage(err.message);
@@ -387,12 +391,14 @@ function MappingFormPage({ api, navigate, mappingId, providerCode }) {
     setForm(next);
     setParamRows(createParamRows(endpoint, next));
     setResponseRows(createResponseRows(endpoint, next));
+    setErrorRows(createErrorRows(endpoint, next));
   }
 
   async function save() {
     setMessage("");
     const mapping = buildMappingJSON(paramRows);
     const responseMapping = buildResponseMappingJSON(responseRows);
+    const errorMapping = buildErrorMappingJSON(errorRows);
     const payload = {
       ...form,
       target_protocol: selectedEndpoint?.protocol || form.target_protocol,
@@ -404,6 +410,8 @@ function MappingFormPage({ api, navigate, mappingId, providerCode }) {
       header_map_json: form.header_map_json || "{}",
       response_field_map_json: stringifyJSON(responseMapping.fieldMap),
       response_defaults_json: stringifyJSON(responseMapping.defaults),
+      error_field_map_json: stringifyJSON(errorMapping.fieldMap),
+      error_defaults_json: stringifyJSON(errorMapping.defaults),
     };
     try {
       const res = await api.json(isEdit ? `/api/mappings/${mappingId}` : "/api/mappings", isEdit ? "PUT" : "POST", payload);
@@ -449,6 +457,13 @@ function MappingFormPage({ api, navigate, mappingId, providerCode }) {
           <details className="json-preview">
             <summary>查看生成的返参映射 JSON</summary>
             <pre>{stringifyJSON(buildResponseMappingJSON(responseRows), 2)}</pre>
+          </details>
+        </Card>
+        <Card title="错误返参映射配置" subtitle="上游返回非 2xx 时，把错误体映射成 OpenAI 兼容的 error.message、error.type、error.param 和 error.code。">
+          <ResponseMappingTable rows={errorRows} onChange={setErrorRows} />
+          <details className="json-preview">
+            <summary>查看生成的错误映射 JSON</summary>
+            <pre>{stringifyJSON(buildErrorMappingJSON(errorRows), 2)}</pre>
           </details>
         </Card>
       </StateBlock>
@@ -639,6 +654,10 @@ function EndpointPreview({ endpoint }) {
         <strong>标准返参</strong>
         <ul>{endpoint.response_fields.map((field) => <li key={field.name}>{field.name}<span>{field.type}</span></li>)}</ul>
       </div>
+      <div>
+        <strong>错误返参</strong>
+        <ul>{(endpoint.error_fields || []).map((field) => <li key={field.name}>{field.name}<span>{field.type}</span></li>)}</ul>
+      </div>
     </div>
   );
 }
@@ -811,6 +830,22 @@ function createResponseRows(endpoint, mapping) {
   });
 }
 
+function createErrorRows(endpoint, mapping) {
+  const fieldMap = safeJSON(mapping.error_field_map_json, {});
+  const defaults = safeJSON(mapping.error_defaults_json, {});
+
+  return (endpoint?.error_fields || []).map((field) => {
+    const mappedField = fieldMap[field.name] || defaultErrorUpstreamField(field.name);
+    const hasDefault = Object.prototype.hasOwnProperty.call(defaults, field.name);
+    return {
+      ...field,
+      action: hasDefault ? "default" : "map",
+      upstream_field: mappedField,
+      default_value: hasDefault ? stringifyValue(defaults[field.name]) : stringifyValue(field.default ?? ""),
+    };
+  });
+}
+
 function buildMappingJSON(paramRows) {
   const fieldMap = {};
   const fileFieldMap = {};
@@ -850,6 +885,20 @@ function buildResponseMappingJSON(responseRows) {
   });
 
   return { fieldMap, defaults };
+}
+
+function buildErrorMappingJSON(errorRows) {
+  return buildResponseMappingJSON(errorRows);
+}
+
+function defaultErrorUpstreamField(name) {
+  const defaults = {
+    "error.message": "base_resp.status_msg",
+    "error.type": "type",
+    "error.param": "param",
+    "error.code": "base_resp.status_code",
+  };
+  return defaults[name] || name;
 }
 
 function safeJSON(raw, fallback) {

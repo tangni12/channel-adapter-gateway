@@ -21,6 +21,7 @@ type EndpointSpec struct {
 	Description      string      `json:"description"`
 	Params           []ParamSpec `json:"params"`
 	ResponseFields   []ParamSpec `json:"response_fields"`
+	ErrorFields      []ParamSpec `json:"error_fields"`
 }
 
 type Catalog struct {

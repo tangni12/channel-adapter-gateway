@@ -191,7 +191,15 @@ func (s *ProxyService) forward(c *gin.Context, start time.Time, requestID string
 
 	outBody := respBody
 	var usage []byte
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+	responseStatus := resp.StatusCode
+	successResponse := resp.StatusCode >= 200 && resp.StatusCode < 300
+	if successResponse {
+		if logicalStatus, ok := transform.LogicalErrorStatus(respBody); ok {
+			responseStatus = logicalStatus
+			successResponse = false
+		}
+	}
+	if successResponse {
 		mappedBody, mappedUsage, err := transform.MapResponse(respBody, rule.ResponseFieldMapJSON, rule.ResponseDefaultsJSON, responseSpecs(rule.TargetEndpoint))
 		if err != nil {
 			s.logRequest(c, requestID, start, publicModel, rule, provider, requestLogPayload{
@@ -208,6 +216,22 @@ func (s *ProxyService) forward(c *gin.Context, start time.Time, requestID string
 		}
 		outBody = mappedBody
 		usage = mappedUsage
+	} else {
+		mappedBody, err := transform.MapErrorResponse(responseStatus, respBody, rule.ErrorFieldMapJSON, rule.ErrorDefaultsJSON, errorSpecs(rule.TargetEndpoint))
+		if err != nil {
+			s.logRequest(c, requestID, start, publicModel, rule, provider, requestLogPayload{
+				upstreamURL:      upReq.URL,
+				status:           responseStatus,
+				traceID:          resp.Header.Get("Trace-Id"),
+				errorMessage:     err.Error(),
+				officialRequest:  upReq.OfficialSnapshot,
+				upstreamRequest:  upReq.UpstreamSnapshot,
+				upstreamResponse: respBody,
+			})
+			c.JSON(http.StatusBadGateway, openAIError("map_error_response_failed", err.Error()))
+			return
+		}
+		outBody = mappedBody
 	}
 	if rule.TargetProtocol == model.TargetProtocolOpenAI && rule.NormalizeOpenAIUsage {
 		outBody, usage, err = transform.NormalizeOpenAIUsageForEndpoint(outBody, rule.TargetEndpoint)
@@ -234,7 +258,7 @@ func (s *ProxyService) forward(c *gin.Context, start time.Time, requestID string
 	}
 	s.logRequest(c, requestID, start, publicModel, rule, provider, requestLogPayload{
 		upstreamURL:      upReq.URL,
-		status:           resp.StatusCode,
+		status:           responseStatus,
 		traceID:          resp.Header.Get("Trace-Id"),
 		officialRequest:  upReq.OfficialSnapshot,
 		upstreamRequest:  upReq.UpstreamSnapshot,
@@ -242,7 +266,7 @@ func (s *ProxyService) forward(c *gin.Context, start time.Time, requestID string
 		officialResponse: outBody,
 		usage:            usage,
 	})
-	c.Data(resp.StatusCode, "application/json", outBody)
+	c.Data(responseStatus, "application/json", outBody)
 }
 
 func (s *ProxyService) upstreamAuthorization(c *gin.Context, provider model.Provider) string {
@@ -387,6 +411,7 @@ func openAIError(code, message string) gin.H {
 		"error": gin.H{
 			"message": message,
 			"type":    "channel_adapter_gateway_error",
+			"param":   "",
 			"code":    code,
 		},
 	}
@@ -399,6 +424,18 @@ func responseSpecs(endpointKey string) []transform.ResponseFieldSpec {
 	}
 	specs := make([]transform.ResponseFieldSpec, 0, len(endpoint.ResponseFields))
 	for _, field := range endpoint.ResponseFields {
+		specs = append(specs, transform.ResponseFieldSpec{Name: field.Name, Type: field.Type, Required: field.Required})
+	}
+	return specs
+}
+
+func errorSpecs(endpointKey string) []transform.ResponseFieldSpec {
+	endpoint, ok := official.FindEndpoint(endpointKey)
+	if !ok {
+		return nil
+	}
+	specs := make([]transform.ResponseFieldSpec, 0, len(endpoint.ErrorFields))
+	for _, field := range endpoint.ErrorFields {
 		specs = append(specs, transform.ResponseFieldSpec{Name: field.Name, Type: field.Type, Required: field.Required})
 	}
 	return specs

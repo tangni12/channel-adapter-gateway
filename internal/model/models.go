@@ -68,6 +68,8 @@ type MappingRule struct {
 
 	ResponseFieldMapJSON string `gorm:"type:jsonb" json:"response_field_map_json,omitempty"`
 	ResponseDefaultsJSON string `gorm:"type:jsonb" json:"response_defaults_json,omitempty"`
+	ErrorFieldMapJSON    string `gorm:"type:jsonb" json:"error_field_map_json,omitempty"`
+	ErrorDefaultsJSON    string `gorm:"type:jsonb" json:"error_defaults_json,omitempty"`
 
 	NormalizeOpenAIUsage bool   `gorm:"not null;default:true" json:"normalize_openai_usage"`
 	Enabled              bool   `gorm:"not null;default:true" json:"enabled"`
